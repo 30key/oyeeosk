@@ -61,6 +61,8 @@ namespace Jackett.Common.Models.Config
 
         public bool ProxyIsAnonymous => string.IsNullOrWhiteSpace(ProxyUsername) || string.IsNullOrWhiteSpace(ProxyPassword);
 
+        public bool LoadOnlyConfiguredIndexers { get; set; }
+
         public string GetProxyAuthString() =>
             !ProxyIsAnonymous
                 ? $"{ProxyUsername}:{ProxyPassword}"

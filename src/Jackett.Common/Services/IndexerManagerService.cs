@@ -8,6 +8,7 @@ using Jackett.Common.Indexers.Meta;
 using Jackett.Common.Models;
 using Jackett.Common.Models.Config;
 using Jackett.Common.Services.Interfaces;
+using Jackett.Common.Utils;
 using Jackett.Common.Utils.Clients;
 using NLog;
 using YamlDotNet.Serialization;
@@ -77,10 +78,31 @@ namespace Jackett.Common.Services
             logger.Info($"Using HTTP Client: {webClient.GetType().Name}");
 
             MigrateRenamedIndexers();
-            InitIndexers();
-            InitCardigannIndexers(path);
+            var indexersToLoad = GetIndexersToLoad();
+            InitIndexers(indexersToLoad);
+            InitCardigannIndexers(GetIndexerDefinitionFiles(path), indexersToLoad);
             InitAggregateIndexer();
             RemoveLegacyConfigurations();
+        }
+
+        private ISet<string> GetIndexersToLoad()
+        {
+            if (serverConfig.LoadOnlyConfiguredIndexers)
+            {
+                return new HashSet<string>(configService.FindConfiguredIndexerIds());
+            }
+
+            return null;
+        }
+
+        private bool GetIndexerShouldBeLoaded(string indexerId, ICollection<string> configuredIndexers)
+        {
+            if (!serverConfig.LoadOnlyConfiguredIndexers)
+            {
+                return true;
+            }
+
+            return configuredIndexers != null && configuredIndexers.Contains(indexerId);
         }
 
         private void MigrateRenamedIndexers()
@@ -110,7 +132,7 @@ namespace Jackett.Common.Services
             }
         }
 
-        private void InitIndexers()
+        private void InitIndexers(ISet<string> configuredIndexers)
         {
             logger.Info("Loading Native indexers ...");
 
@@ -130,7 +152,13 @@ namespace Jackett.Common.Services
 
                     var arguments = new object[] { configService, indexerWebClientInstance, logger, protectionService, cacheService };
                     var indexer = (IIndexer)constructor.Invoke(arguments);
-                    return indexer;
+
+                    if (GetIndexerShouldBeLoaded(indexer.Id, configuredIndexers))
+                    {
+                        return indexer;
+                    }
+
+                    return null;
                 }
 
                 logger.Error($"Cannot instantiate Native indexer: {type.Name}");
@@ -146,7 +174,7 @@ namespace Jackett.Common.Services
             logger.Info($"Loaded {nativeIndexers.Count} Native indexers: {string.Join(", ", nativeIndexers.Select(i => i.Id))}");
         }
 
-        private void InitCardigannIndexers(IEnumerable<string> path)
+        private void InitCardigannIndexers(IEnumerable<FileInfo> files, ISet<string> indexersToLoad)
         {
             logger.Info("Loading Cardigann indexers from: " + string.Join(", ", path));
 
@@ -157,9 +185,6 @@ namespace Jackett.Common.Services
 
             try
             {
-                var directoryInfos = path.Select(p => new DirectoryInfo(p));
-                var existingDirectories = directoryInfos.Where(d => d.Exists);
-                var files = existingDirectories.SelectMany(d => d.GetFiles("*.yml"));
                 var definitions = files.Select(file =>
                 {
                     logger.Debug("Loading Cardigann definition " + file.FullName);
@@ -167,7 +192,12 @@ namespace Jackett.Common.Services
                     {
                         var definitionString = File.ReadAllText(file.FullName);
                         var definition = deserializer.Deserialize<IndexerDefinition>(definitionString);
-                        return definition;
+                        if (GetIndexerShouldBeLoaded(definition.Id, indexersToLoad))
+                        {
+                            return definition;
+                        }
+
+                        return null;
                     }
                     catch (Exception e)
                     {
@@ -216,6 +246,14 @@ namespace Jackett.Common.Services
                 logger.Error($"Error while loading Cardigann definitions: {e}");
             }
             logger.Info($"Loaded {indexers.Count} indexers in total");
+        }
+
+        private static IEnumerable<FileInfo> GetIndexerDefinitionFiles(IEnumerable<string> path)
+        {
+            var directoryInfos = path.Select(p => new DirectoryInfo(p));
+            var existingDirectories = directoryInfos.Where(d => d.Exists);
+            var files = existingDirectories.SelectMany(d => d.GetFiles("*.yml"));
+            return files;
         }
 
         public void InitAggregateIndexer()

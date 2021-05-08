@@ -82,6 +82,7 @@ namespace Jackett.Server.Controllers
             var saveDir = config.blackholedir;
             var updateDisabled = config.updatedisabled;
             var preRelease = config.prerelease;
+            var loadOnlyConfiguredIndexers = config.loadonlyconfiguredindexers;
             var enhancedLogging = config.logging;
 
             var basePathOverride = config.basepathoverride;
@@ -103,6 +104,7 @@ namespace Jackett.Server.Controllers
                 webHostRestartNeeded = true;
             }
 
+            serverConfig.LoadOnlyConfiguredIndexers = loadOnlyConfiguredIndexers;
             serverConfig.UpdateDisabled = updateDisabled;
             serverConfig.UpdatePrerelease = preRelease;
             serverConfig.BasePathOverride = basePathOverride;
