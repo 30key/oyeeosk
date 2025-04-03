@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: ja 
+    plan: free
+    env: docker
+    dockerfilePath: src/docker-compose.yml
+    repo: https://github.com/30key/rend
+    branch: master
+    autoDeploy: false
+    envVars:
+      - key: PORT
+        value: 9117  # Default port value, update if needed
